@@ -32,7 +32,7 @@ const log = logger(module)
 
 
 type Component = {
-  value?: Values | boolean
+  value?: Values
   rawValue?: unknown
 }
 
@@ -69,7 +69,7 @@ const getPossibleSmartValues = (automation: AutomationInstance): SmartValueConta
     .flatMap(component => {
       const containers: SmartValueContainer[] = []
 
-      if (component.value !== undefined && !_.isBoolean(component.value)) {
+      if (component.value !== undefined) {
         const { value } = component
         Object.keys(component.value)
           .filter(key => _.isString(value[key]) || isTemplateExpression(value[key]))
