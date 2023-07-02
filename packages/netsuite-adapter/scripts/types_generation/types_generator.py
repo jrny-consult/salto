@@ -199,14 +199,13 @@ default_value_pattern = re.compile("[\s\S]*The default value is '?‘?([-|#\w]*)
 possible_values_pattern = re.compile("[\s\S]*For information about possible values, see ('*\w*'*)\.[\s\S]*")
 
 def extract_default_value_from_field_description(description):
-    regex_matches = default_value_pattern.match(description)
-    if regex_matches:
+    if regex_matches := default_value_pattern.match(description):
         return regex_matches.groups()[0]
     return None
 
 def parse_field_def(type_name, cells, is_attribute, is_inner_type, script_id_prefix):
     def to_field_type(field_name, netsuite_field_type, description):
-        field_full_name = type_name + '_' + field_name
+        field_full_name = f'{type_name}_{field_name}'
         if field_full_name in field_name_to_type_name:
             return field_name_to_type_name[field_full_name]
         if field_name == SCRIPT_ID_FIELD_NAME:
@@ -227,8 +226,8 @@ def parse_field_def(type_name, cells, is_attribute, is_inner_type, script_id_pre
         return 'BuiltinTypes.STRING /* Original type was {0} */'.format('   '.join(netsuite_field_type.splitlines()))
 
     def is_required(is_required_from_doc, field_name):
-        field_full_name = type_name + '_' + field_name
-        return is_required_from_doc and not (field_full_name in should_not_be_required)
+        field_full_name = f'{type_name}_{field_name}'
+        return is_required_from_doc and field_full_name not in should_not_be_required
 
     def create_script_id_regex(description):
         def remove_script_id_underscore_suffix(script_id_prefix):
@@ -271,7 +270,10 @@ def parse_enums(account_id):
             webpage.get(page_link)
             enum_to_possible_values[enum_name] = [possible_value.text.split()[0] for possible_value in webpage.find_elements(By.XPATH, '//*[@id="nshelp"]/div[2]/div/div/ul/li/p')]
         except Exception as e:
-            logging.error('Failed to extract possible values for enum: ' + enum_name + '. Error: ', e)
+            logging.error(
+                f'Failed to extract possible values for enum: {enum_name}. Error: ',
+                e,
+            )
     return enum_to_possible_values
 
 
@@ -290,8 +292,14 @@ def parse_type(type_name, script_id_prefix, inner_type_name_to_def, inner_type_n
 
     def is_structured_list_field(fields_tables_len, structured_fields_len):
         type_description_sections = webpage.find_elements(By.XPATH, '//*[@id="nshelp"]/div[2]/div/p')
-        is_explicitly_not_a_list = any([('field group is a DEFAULT' in type_description_section.text) for type_description_section in type_description_sections])
-        is_explicitly_a_list = any([('field group is a COLLECTION' in type_description_section.text) for type_description_section in type_description_sections])
+        is_explicitly_not_a_list = any(
+            'field group is a DEFAULT' in type_description_section.text
+            for type_description_section in type_description_sections
+        )
+        is_explicitly_a_list = any(
+            'field group is a COLLECTION' in type_description_section.text
+            for type_description_section in type_description_sections
+        )
         return is_explicitly_a_list or (fields_tables_len == 1 and structured_fields_len == 1 and not is_explicitly_not_a_list)
 
     fields_tables = webpage.find_elements(By.XPATH, '//*[@class="nshelp_section"]')
@@ -314,7 +322,14 @@ def parse_type(type_name, script_id_prefix, inner_type_name_to_def, inner_type_n
             for inner_structured_field_name, link in inner_structured_field_name_to_link.items():
                 webpage.get(link)
                 # we create inner types with their parent's type_name so there will be no Salto element naming collisions
-                created_inner_type_name = parse_type_for_inner_structured_field(type_name + '_' + inner_structured_field_name, inner_type_name_to_def, inner_type_names_order, top_level_type_name)
+                created_inner_type_name = (
+                    parse_type_for_inner_structured_field(
+                        f'{type_name}_{inner_structured_field_name}',
+                        inner_type_name_to_def,
+                        inner_type_names_order,
+                        top_level_type_name,
+                    )
+                )
                 is_list = False
                 if (is_list_from_doc and created_inner_type_name not in should_not_be_list) or created_inner_type_name in should_be_list:
                     is_list = True
@@ -349,7 +364,7 @@ def parse_types_definitions(account_id, type_name_to_script_id_prefix):
     type_name_to_types_defs = {}
     for type_name, page_link in type_name_to_page_link.items():
         try:
-            logging.info('fetching type definition: %s' % type_name)
+            logging.info(f'fetching type definition: {type_name}')
             webpage.get(page_link)
             script_id_prefix = get_script_id_prefix(type_name)
             inner_type_names_order = []
@@ -361,7 +376,7 @@ def parse_types_definitions(account_id, type_name_to_script_id_prefix):
                 INNER_TYPE_NAMES_ORDER: inner_type_names_order,
             }
         except Exception as e:
-            logging.error('Failed to parse type: ' + type_name + '. Error: ', sys.exc_info())
+            logging.error(f'Failed to parse type: {type_name}. Error: ', sys.exc_info())
     return type_name_to_types_defs
 
 
@@ -400,7 +415,7 @@ def create_types_file(type_names):
         custom_types_inits = custom_types_inits,
         custom_types_names = custom_types_names,
     )
-    with open(SRC_DIR + 'types.ts', 'w') as file:
+    with open(f'{SRC_DIR}types.ts', 'w') as file:
         file.write(file_content)
 
 
@@ -412,7 +427,7 @@ def insert_in_order(type_name, order):
             index_of_parent = order.index(parent_type_name)
             order.insert(index_of_parent, type_name)
             return
-    raise Exception('parent of %s does not exists' % type_name)
+    raise Exception(f'parent of {type_name} does not exists')
 
 
 def add_types_defs(type_name_to_types_defs):
@@ -428,7 +443,9 @@ def add_types_defs(type_name_to_types_defs):
         if top_level_type_name not in type_name_to_types_defs:
             continue
         if type_name in type_name_to_types_defs[top_level_type_name][INNER_TYPE_NAME_TO_DEF]:
-            logging.warning('type %s already exists in %s. overriding it.' % (type_name, top_level_type_name))
+            logging.warning(
+                f'type {type_name} already exists in {top_level_type_name}. overriding it.'
+            )
         else:
             insert_in_order(type_name, type_name_to_types_defs[top_level_type_name][INNER_TYPE_NAMES_ORDER])
         type_name_to_types_defs[top_level_type_name][INNER_TYPE_NAME_TO_DEF][type_name] = type_def
@@ -442,7 +459,9 @@ def add_types_defs(type_name_to_types_defs):
         if target_top_level not in type_name_to_types_defs:
             continue
         if target in type_name_to_types_defs[target_top_level][INNER_TYPE_NAME_TO_DEF]:
-            logging.warning('type %s already exists in %s. overriding it.' % (target, target_top_level))
+            logging.warning(
+                f'type {target} already exists in {target_top_level}. overriding it.'
+            )
         else:
             insert_in_order(target, type_name_to_types_defs[target_top_level][INNER_TYPE_NAMES_ORDER])
         type_name_to_types_defs[target_top_level][INNER_TYPE_NAME_TO_DEF][target] = type_def
@@ -481,7 +500,7 @@ def generate_enums_file(enum_to_possible_values):
       enums_values = enums_values,
     )
     Path(TYPES_DIR).mkdir(parents=True, exist_ok=True)
-    with open(TYPES_DIR + 'enums.ts', 'w') as file:
+    with open(f'{TYPES_DIR}enums.ts', 'w') as file:
         file.write(file_content)
 
 
@@ -554,7 +573,7 @@ def order_types_fields(type_name_to_types_defs):
         type_def_fields = type_def[FIELDS]
         if len(fields_order) != len(type_def_fields):
             logging.warning('Mismatch in the order of {0} type fields! len(fields_order)={1} len(type_def_fields)={2}'.format(type_name, len(fields_order), len(type_def_fields)))
-        field_name_to_def = dict((field[NAME], field) for field in type_def_fields)
+        field_name_to_def = {field[NAME]: field for field in type_def_fields}
         ordered_fields = []
         for field_name in fields_order:
             if (field_name in field_name_to_def):

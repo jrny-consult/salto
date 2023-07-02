@@ -52,7 +52,7 @@ def create_permissions_file(permissions):
   formatted_permissions = ["{key}: new Set({value}),".format(key = key,value = [level.upper() for level in permissions[key]]) for key in permissions]
   file_content = role_permissions_file_template.format(permission_id_to_valid_levels = LINE_SEPERATOR.join(formatted_permissions))
   Path(PERMISSIONS_DIR).mkdir(parents=True, exist_ok=True)
-  with open(PERMISSIONS_DIR + 'role_permissions.ts', 'w') as file:
+  with open(f'{PERMISSIONS_DIR}role_permissions.ts', 'w') as file:
     file.write(file_content)
 
 driver = webdriver.Chrome()
