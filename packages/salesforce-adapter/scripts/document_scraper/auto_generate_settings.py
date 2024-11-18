@@ -32,7 +32,7 @@ def extract_settings(link):
   return link.split('_')[-1::][0][:-4:]
 
 def is_link(line):
-  return '.htm' == line [-4::]
+  return line [-4::] == '.htm'
 
 def parse_raw_settings_data(raw_settings_data):
   settings_data = raw_settings_data.split('\n')
@@ -65,11 +65,11 @@ def generate_settings_file(settings_type):
 
 def is_new_field(field, settings_type):
   try:
-   with open(generate_settings_file(settings_type), 'r') as f:
+    with open(generate_settings_file(settings_type), 'r') as f:
       data = f.read()
-      return not ((' ' + field + ' ') in data)
+      return f' {field} ' not in data
   except FileNotFoundError:
-    print('couldnt handle ' + settings_type)
+    print(f'couldnt handle {settings_type}')
     return False
 
 def is_approved_field(field_type):
@@ -93,20 +93,13 @@ def generate_typescript(settings_fields):
   return typescript_code
 
 def parse_json_field(field_name):
-  ret = {}
-  ret['name'] = field_name
-  ret['type'] = 'BOOLEAN'
-
-  return ret
+  return {'name': field_name, 'type': 'BOOLEAN'}
 
 def generate_json(settings_fields):
-  json_product = {}
-  json_product['id'] = settings_fields[0]
-  json_product['fields'] = []
-
+  json_product = {'id': settings_fields[0], 'fields': []}
   if len(settings_fields[1]) == 0:
     return ''
-  
+
   for field_name, field_type in settings_fields[1]:
     if field_type != 'boolean':
       raise Exception('wtf wrong type, how did it get here')
@@ -132,11 +125,9 @@ def optimize_json():
   updated_json = []
   with open(MISSING_FIELDS_JSON) as f:
     json_data = json.load(f)
-  
+
   for obj in json_data:
-    updated_obj = {}
-    updated_obj['id'] = obj['id']
-    updated_obj['fields'] = []
+    updated_obj = {'id': obj['id'], 'fields': []}
     boolean_types = []
     for field in obj['fields']:
       if field['type'] == 'BOOLEAN':
